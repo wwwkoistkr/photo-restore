@@ -13,7 +13,6 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Malgun Gothi
 .nav{display:flex;align-items:center;gap:12px;margin-bottom:20px}
 .home-btn{background:#21262d;border:1px solid var(--border);color:var(--text);border-radius:10px;
 padding:10px 18px;font-size:14px;font-weight:600;text-decoration:none}
-.home-btn:hover{border-color:var(--accent);color:var(--accent)}
 h1{font-size:clamp(22px,4vw,30px);background:linear-gradient(90deg,#58a6ff,#bc8cff);
 -webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .ver{font-size:11px;color:var(--green);border:1px solid var(--green);border-radius:10px;padding:1px 8px}
@@ -23,7 +22,9 @@ padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;text-decoration:
 .btn.gray{background:#21262d;border:1px solid var(--border)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .save-status{font-size:13px;color:var(--green);margin-bottom:20px;min-height:18px}
+.stage{font-size:13px;color:var(--sub);line-height:2;font-family:Consolas,monospace}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.errbox{color:var(--red);font-size:13px;line-height:1.7}
 .item{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .compare{display:grid;grid-template-columns:1fr 1fr}
 .compare img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
@@ -43,10 +44,9 @@ padding:2px 8px;border-radius:8px}
   <div class="nav">
     <a class="home-btn" href="/">🏠 홈으로</a>
     <h1>보정 결과</h1>
-    <span class="ver">v3</span>
+    <span class="ver">v5</span>
   </div>
-  <p class="note">왼쪽이 원본, 오른쪽이 보정본. <strong>"폴더에 전체 저장"</strong>을 누르고
-  저장할 폴더(예: C:\PHOTO_M)를 한 번만 선택하면 전부 자동 저장돼요.</p>
+  <p class="note">왼쪽이 원본, 오른쪽이 보정본.</p>
 
   <div class="toolbar">
     <button class="btn" id="saveFolder">📁 폴더에 전체 저장</button>
@@ -56,59 +56,150 @@ padding:2px 8px;border-radius:8px}
   </div>
   <div class="save-status" id="saveStatus"></div>
 
-  <div class="grid" id="grid">로딩 중...</div>
+  <div class="stage" id="stage">0단계: 페이지 표시됨 (스크립트 시작 전)</div>
+  <div class="grid" id="grid"></div>
 </div>
 
 <script>
-const batchId = new URLSearchParams(location.search).get('batch');
-if (!batchId) location.href = '/';
-let items = [];
+var stage = document.getElementById('stage');
+var grid = document.getElementById('grid');
+function report(msg) { stage.innerHTML += '<br>' + msg; }
 
-async function load() {
-  const res = await fetch(`/api/batches/${batchId}/results`);
-  const data = await res.json();
-  items = data.items || [];
+window.addEventListener('error', function(e) {
+  report('<span style="color:#f85149">스크립트 오류: ' + e.message + ' (줄 ' + e.lineno + ')</span>');
+});
 
-  const failedCount = items.filter(i => i.status === 'failed').length;
-  document.getElementById('retryBtn').style.display = failedCount > 0 ? 'inline-block' : 'none';
+report('1단계: 스크립트 시작됨 ✓');
 
-  document.getElementById('grid').innerHTML = items.map(i => {
-    const statusHtml = i.status === 'done'
-      ? '<span class="status s-done">✓ 완료</span>'
-      : i.status === 'failed'
-        ? `<span class="status s-failed">✗ 실패 — ${esc(i.error || '')}</span>`
-        : `<span class="status s-other">${i.status}</span>`;
-    const enhanced = i.enhancedUrl
-      ? `<div class="half"><a href="${i.enhancedUrl}" target="_blank">
-           <img src="${i.enhancedUrl}" loading="lazy"></a>
-           <span class="label">보정</span></div>`
-      : `<div class="half" style="background:#0d1117;display:flex;align-items:center;
-           justify-content:center;color:#8b949e;font-size:12px">처리 안 됨</div>`;
-    return `<div class="item">
-      <div class="compare">
-        <div class="half"><a href="${i.originalUrl}" target="_blank">
-          <img src="${i.originalUrl}" loading="lazy"></a>
-          <span class="label">원본</span></div>
-        ${enhanced}
-      </div>
-      <div class="meta">
-        <div class="name">${esc(i.filename)}</div>
-        ${statusHtml}
-        <div style="margin-top:8px">
-          ${i.enhancedUrl ? `<a href="${i.enhancedUrl}" download="${esc(i.filename)}">보정본 받기</a>` : ''}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+var batchId = new URLSearchParams(location.search).get('batch');
+if (!batchId) { report('배치 ID 없음 → 홈으로'); location.href = '/'; }
+report('2단계: 배치 ID 확인 ✓ (' + batchId.slice(0,8) + '...)');
+
+var items = [];
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 }
 
-document.getElementById('saveFolder').onclick = async () => {
-  if (!window.showDirectoryPicker) {
-    alert('이 브라우저는 폴더 저장을 지원하지 않아요. "한 장씩 다운로드"를 사용해 주세요. (크롬/엣지 권장)');
+report('3단계: 서버에 결과 요청 중...');
+
+var xhr = new XMLHttpRequest();
+xhr.open('GET', '/api/batches/' + batchId + '/results?t=' + Date.now());
+xhr.timeout = 20000;
+xhr.onload = function() {
+  report('4단계: 서버 응답 수신 ✓ (HTTP ' + xhr.status + ')');
+  if (xhr.status !== 200) {
+    report('<span style="color:#f85149">서버 오류 응답: ' + esc(xhr.responseText.slice(0,200)) + '</span>');
     return;
   }
-  const done = items.filter(i => i.status === 'done' && i.enhancedUrl);
-  if (done.length === 0) { alert('저장할 보정본이 없어요.'); return; }
+  var data;
+  try { data = JSON.parse(xhr.responseText); }
+  catch (e) { report('<span style="color:#f85149">응답 해석 실패</span>'); return; }
 
-  const btn = document.getElementById('saveFolder');
-  const status = document
+  items = data.items || [];
+  report('5단계: 사진 ' + items.length + '장 확인 ✓ — 화면 구성 중...');
+  renderGrid();
+  report('6단계: 완료 ✓');
+  setTimeout(function(){ stage.style.display = 'none'; }, 1500);
+};
+xhr.onerror = function() {
+  report('<span style="color:#f85149">통신 실패 (네트워크 오류)</span>');
+};
+xhr.ontimeout = function() {
+  report('<span style="color:#f85149">통신 시간 초과 (20초) — 서버 무응답</span>');
+};
+xhr.send();
+
+function renderGrid() {
+  var failedCount = items.filter(function(i){ return i.status === 'failed'; }).length;
+  document.getElementById('retryBtn').style.display = failedCount > 0 ? 'inline-block' : 'none';
+
+  var html = '';
+  for (var n = 0; n < items.length; n++) {
+    var i = items[n];
+    var statusHtml = i.status === 'done'
+      ? '<span class="status s-done">✓ 완료</span>'
+      : i.status === 'failed'
+        ? '<span class="status s-failed">✗ 실패 — ' + esc(i.error || '') + '</span>'
+        : '<span class="status s-other">' + esc(i.status) + '</span>';
+    var enhanced = i.enhancedUrl
+      ? '<div class="half"><a href="' + i.enhancedUrl + '" target="_blank">'
+        + '<img src="' + i.enhancedUrl + '" loading="lazy"></a>'
+        + '<span class="label">보정</span></div>'
+      : '<div class="half" style="background:#0d1117;display:flex;align-items:center;'
+        + 'justify-content:center;color:#8b949e;font-size:12px">처리 안 됨</div>';
+    html += '<div class="item"><div class="compare">'
+      + '<div class="half"><a href="' + i.originalUrl + '" target="_blank">'
+      + '<img src="' + i.originalUrl + '" loading="lazy"></a>'
+      + '<span class="label">원본</span></div>'
+      + enhanced
+      + '</div><div class="meta">'
+      + '<div class="name">' + esc(i.filename) + '</div>'
+      + statusHtml
+      + '<div style="margin-top:8px">'
+      + (i.enhancedUrl ? '<a href="' + i.enhancedUrl + '" download="' + esc(i.filename) + '">보정본 받기</a>' : '')
+      + '</div></div></div>';
+  }
+  grid.innerHTML = html;
+}
+
+document.getElementById('saveFolder').onclick = function() {
+  if (!window.showDirectoryPicker) { alert('크롬/엣지에서만 지원돼요.'); return; }
+  var done = items.filter(function(i){ return i.status === 'done' && i.enhancedUrl; });
+  if (done.length === 0) { alert('저장할 보정본이 없어요.'); return; }
+  var btn = document.getElementById('saveFolder');
+  var status = document.getElementById('saveStatus');
+
+  window.showDirectoryPicker({ mode: 'readwrite' }).then(async function(dir) {
+    btn.disabled = true;
+    var ok = 0;
+    for (var n = 0; n < done.length; n++) {
+      status.textContent = '저장 중 ' + (n+1) + '/' + done.length + ' — ' + done[n].filename;
+      try {
+        var resp = await fetch(done[n].enhancedUrl);
+        if (!resp.ok) continue;
+        var blob = await resp.blob();
+        if (blob.size === 0) continue;
+        var fh = await dir.getFileHandle(done[n].filename, { create: true });
+        var w = await fh.createWritable();
+        await w.write(blob);
+        await w.close();
+        ok++;
+      } catch (e) { }
+    }
+    status.textContent = '✅ 완료! ' + ok + '장 저장됨';
+    btn.disabled = false;
+  }).catch(function(e) {
+    if (e.name !== 'AbortError') status.textContent = '저장 오류: ' + e.message;
+  });
+};
+
+document.getElementById('dlAll').onclick = async function() {
+  var done = items.filter(function(i){ return i.status === 'done' && i.enhancedUrl; });
+  var btn = document.getElementById('dlAll');
+  btn.disabled = true;
+  for (var n = 0; n < done.length; n++) {
+    btn.textContent = '다운로드 ' + (n+1) + '/' + done.length;
+    var a = document.createElement('a');
+    a.href = done[n].enhancedUrl;
+    a.download = done[n].filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    await new Promise(function(r){ setTimeout(r, 600); });
+  }
+  btn.textContent = '한 장씩 다운로드';
+  btn.disabled = false;
+};
+
+document.getElementById('retryBtn').onclick = function() {
+  fetch('/api/batches/' + batchId + '/retry-failed', {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      alert(d.requeued + '장 재시도 시작!');
+      location.href = '/progress.html?batch=' + batchId;
+    });
+};
+</script>
+</body>
+</html>
