@@ -3,105 +3,112 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>진행 상황 — PhotoRestore</title>
+<title>결과 — PhotoRestore</title>
 <style>
 :root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--sub:#8b949e;
---accent:#58a6ff;--green:#3fb950;--red:#f85149;--amber:#d29922}
+--accent:#58a6ff;--green:#3fb950;--red:#f85149}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Malgun Gothic',sans-serif;min-height:100vh;padding:clamp(16px,4vw,48px)}
-.container{max-width:760px;margin:0 auto}
-.nav{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.container{max-width:960px;margin:0 auto}
+.nav{display:flex;align-items:center;gap:12px;margin-bottom:20px}
 .home-btn{background:#21262d;border:1px solid var(--border);color:var(--text);border-radius:10px;
 padding:10px 18px;font-size:14px;font-weight:600;text-decoration:none}
 .home-btn:hover{border-color:var(--accent);color:var(--accent)}
 h1{font-size:clamp(22px,4vw,30px);background:linear-gradient(90deg,#58a6ff,#bc8cff);
 -webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .ver{font-size:11px;color:var(--green);border:1px solid var(--green);border-radius:10px;padding:1px 8px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-.stat{background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
-.stat .num{font-size:clamp(20px,4vw,28px);font-weight:700}
-.stat .label{font-size:12px;color:var(--sub);margin-top:4px}
-.n-done{color:var(--green)} .n-fail{color:var(--red)} .n-pend{color:var(--amber)} .n-total{color:var(--accent)}
-.bar{height:14px;background:#0d1117;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
-.fill{height:100%;width:0%;background:linear-gradient(90deg,#1f6feb,#3fb950);transition:width .5s}
-.eta{text-align:center;color:var(--sub);font-size:14px;margin-top:12px}
-.logs{font-family:Consolas,monospace;font-size:12px;max-height:240px;overflow-y:auto;line-height:1.8}
-.logs .warn{color:var(--amber)} .logs .error{color:var(--red)} .logs .info{color:var(--sub)}
-.btn{display:none;width:100%;background:linear-gradient(90deg,#238636,#2ea043);color:#fff;text-align:center;
-text-decoration:none;border-radius:10px;padding:16px;font-size:16px;font-weight:600;margin-top:8px}
-.note{font-size:13px;color:var(--sub);text-align:center;margin-top:16px;line-height:1.7}
+.toolbar{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.btn{background:linear-gradient(90deg,#238636,#2ea043);color:#fff;border:none;border-radius:10px;
+padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.gray{background:#21262d;border:1px solid var(--border)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.save-status{font-size:13px;color:var(--green);margin-bottom:20px;min-height:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.item{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.compare{display:grid;grid-template-columns:1fr 1fr}
+.compare img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.compare .label{position:absolute;top:6px;left:6px;font-size:10px;background:rgba(0,0,0,.6);
+padding:2px 8px;border-radius:8px}
+.half{position:relative}
+.meta{padding:12px 14px;font-size:13px}
+.meta .name{font-weight:600;word-break:break-all}
+.meta .status{font-size:12px;margin-top:4px}
+.s-done{color:var(--green)} .s-failed{color:var(--red)} .s-other{color:var(--sub)}
+.meta a{color:var(--accent);font-size:12px;text-decoration:none;margin-right:12px}
+.note{font-size:13px;color:var(--sub);margin-bottom:16px;line-height:1.7}
 </style>
 </head>
 <body>
 <div class="container">
   <div class="nav">
     <a class="home-btn" href="/">🏠 홈으로</a>
-    <h1>보정 진행 중</h1>
-    <span class="ver">v2</span>
+    <h1>보정 결과</h1>
+    <span class="ver">v3</span>
   </div>
+  <p class="note">왼쪽이 원본, 오른쪽이 보정본. <strong>"폴더에 전체 저장"</strong>을 누르고
+  저장할 폴더(예: C:\PHOTO_M)를 한 번만 선택하면 전부 자동 저장돼요.</p>
 
-  <div class="card">
-    <div class="stats">
-      <div class="stat"><div class="num n-total" id="total">-</div><div class="label">전체</div></div>
-      <div class="stat"><div class="num n-done" id="done">-</div><div class="label">완료</div></div>
-      <div class="stat"><div class="num n-pend" id="pending">-</div><div class="label">대기</div></div>
-      <div class="stat"><div class="num n-fail" id="failed">-</div><div class="label">실패</div></div>
-    </div>
-    <div class="bar"><div class="fill" id="fill"></div></div>
-    <div class="eta" id="eta">계산 중...</div>
-    <a class="btn" id="resultBtn" href="#">결과 보러 가기 →</a>
-    <p class="note">이 창을 닫아도 처리는 계속됩니다. 나중에 이 주소로 다시 들어오면 돼요.</p>
+  <div class="toolbar">
+    <button class="btn" id="saveFolder">📁 폴더에 전체 저장</button>
+    <button class="btn gray" id="dlAll">한 장씩 다운로드</button>
+    <button class="btn gray" id="retryBtn" style="display:none">실패 건 재시도</button>
+    <a class="btn gray" href="/">새 배치 시작</a>
   </div>
+  <div class="save-status" id="saveStatus"></div>
 
-  <div class="card">
-    <div style="font-size:13px;color:var(--sub);margin-bottom:12px">최근 로그</div>
-    <div class="logs" id="logs">로딩 중...</div>
-  </div>
+  <div class="grid" id="grid">로딩 중...</div>
 </div>
 
 <script>
 const batchId = new URLSearchParams(location.search).get('batch');
 if (!batchId) location.href = '/';
+let items = [];
 
-async function poll() {
-  try {
-    const res = await fetch(`/api/batches/${batchId}`);
-    if (!res.ok) return;
-    const p = await res.json();
+async function load() {
+  const res = await fetch(`/api/batches/${batchId}/results`);
+  const data = await res.json();
+  items = data.items || [];
 
-    document.getElementById('total').textContent = p.total;
-    document.getElementById('done').textContent = p.done;
-    document.getElementById('pending').textContent = p.pending + p.processing;
-    document.getElementById('failed').textContent = p.failed;
+  const failedCount = items.filter(i => i.status === 'failed').length;
+  document.getElementById('retryBtn').style.display = failedCount > 0 ? 'inline-block' : 'none';
 
-    const pct = p.total ? Math.round((p.done + p.failed) / p.total * 100) : 0;
-    document.getElementById('fill').style.width = pct + '%';
-
-    const eta = document.getElementById('eta');
-    if (p.status !== 'processing') {
-      eta.textContent = p.status === 'completed'
-        ? '✅ 전체 완료!'
-        : `⚠️ 완료 (실패 ${p.failed}장 — 결과 화면에서 재시도 가능)`;
-      const btn = document.getElementById('resultBtn');
-      btn.style.display = 'block';
-      btn.href = `/results.html?batch=${batchId}`;
-    } else if (p.etaSeconds != null) {
-      const m = Math.floor(p.etaSeconds / 60), s = p.etaSeconds % 60;
-      eta.textContent = `예상 남은 시간: 약 ${m > 0 ? m + '분 ' : ''}${s}초`;
-    } else {
-      eta.textContent = '처리 시작 대기 중...';
-    }
-
-    document.getElementById('logs').innerHTML = (p.recentLogs || [])
-      .map(l => `<div class="${l.level}">[${l.at.slice(11,19)}] ${esc(l.message)}</div>`)
-      .join('') || '아직 로그 없음';
-  } catch (e) { /* 다음 폴링에서 재시도 */ }
+  document.getElementById('grid').innerHTML = items.map(i => {
+    const statusHtml = i.status === 'done'
+      ? '<span class="status s-done">✓ 완료</span>'
+      : i.status === 'failed'
+        ? `<span class="status s-failed">✗ 실패 — ${esc(i.error || '')}</span>`
+        : `<span class="status s-other">${i.status}</span>`;
+    const enhanced = i.enhancedUrl
+      ? `<div class="half"><a href="${i.enhancedUrl}" target="_blank">
+           <img src="${i.enhancedUrl}" loading="lazy"></a>
+           <span class="label">보정</span></div>`
+      : `<div class="half" style="background:#0d1117;display:flex;align-items:center;
+           justify-content:center;color:#8b949e;font-size:12px">처리 안 됨</div>`;
+    return `<div class="item">
+      <div class="compare">
+        <div class="half"><a href="${i.originalUrl}" target="_blank">
+          <img src="${i.originalUrl}" loading="lazy"></a>
+          <span class="label">원본</span></div>
+        ${enhanced}
+      </div>
+      <div class="meta">
+        <div class="name">${esc(i.filename)}</div>
+        ${statusHtml}
+        <div style="margin-top:8px">
+          ${i.enhancedUrl ? `<a href="${i.enhancedUrl}" download="${esc(i.filename)}">보정본 받기</a>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
-poll();
-setInterval(poll, 5000);
-</script>
-</body>
-</html>
+document.getElementById('saveFolder').onclick = async () => {
+  if (!window.showDirectoryPicker) {
+    alert('이 브라우저는 폴더 저장을 지원하지 않아요. "한 장씩 다운로드"를 사용해 주세요. (크롬/엣지 권장)');
+    return;
+  }
+  const done = items.filter(i => i.status === 'done' && i.enhancedUrl);
+  if (done.length === 0) { alert('저장할 보정본이 없어요.'); return; }
+
+  const btn = document.getElementById('saveFolder');
+  const status = document
