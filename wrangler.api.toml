@@ -1,0 +1,21 @@
+# ===== API Worker (오케스트레이터 + 프론트엔드 정적 서빙) =====
+name = "photo-restore-api"
+main = "src/api/index.ts"
+compatibility_date = "2026-06-01"
+
+# 프론트엔드 정적 파일을 같은 도메인에서 서빙 (CORS 불필요)
+[assets]
+directory = "src/frontend"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "photo-restore-db"
+database_id = "753af3a6-c29a-4574-a77d-6b2ee7436faa"   # wrangler d1 create 출력값으로 교체
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "photo-restore"
+
+[[queues.producers]]
+binding = "JOB_QUEUE"
+queue = "photo-jobs"

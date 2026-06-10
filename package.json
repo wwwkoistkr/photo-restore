@@ -1,0 +1,20 @@
+{
+  "name": "photo-restore",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "deploy:api": "wrangler deploy -c wrangler.api.toml",
+    "deploy:consumer": "wrangler deploy -c wrangler.consumer.toml",
+    "db:create": "wrangler d1 create photo-restore-db",
+    "db:migrate": "wrangler d1 migrations apply photo-restore-db --remote -c wrangler.api.toml"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250303.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}

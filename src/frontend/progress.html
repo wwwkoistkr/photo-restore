@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>진행 상황 — PhotoRestore</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--sub:#8b949e;
+--accent:#58a6ff;--green:#3fb950;--red:#f85149;--amber:#d29922}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Malgun Gothic',sans-serif;min-height:100vh;padding:clamp(16px,4vw,48px)}
+.container{max-width:760px;margin:0 auto}
+h1{font-size:clamp(22px,4vw,30px);background:linear-gradient(90deg,#58a6ff,#bc8cff);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.stat{background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+.stat .num{font-size:clamp(20px,4vw,28px);font-weight:700}
+.stat .label{font-size:12px;color:var(--sub);margin-top:4px}
+.n-done{color:var(--green)} .n-fail{color:var(--red)} .n-pend{color:var(--amber)} .n-total{color:var(--accent)}
+.bar{height:14px;background:#0d1117;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.fill{height:100%;width:0%;background:linear-gradient(90deg,#1f6feb,#3fb950);transition:width .5s}
+.eta{text-align:center;color:var(--sub);font-size:14px;margin-top:12px}
+.logs{font-family:Consolas,monospace;font-size:12px;max-height:240px;overflow-y:auto;line-height:1.8}
+.logs .warn{color:var(--amber)} .logs .error{color:var(--red)} .logs .info{color:var(--sub)}
+.btn{display:none;width:100%;background:linear-gradient(90deg,#238636,#2ea043);color:#fff;text-align:center;
+text-decoration:none;border-radius:10px;padding:16px;font-size:16px;font-weight:600;margin-top:8px}
+.note{font-size:13px;color:var(--sub);text-align:center;margin-top:16px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>보정 진행 중</h1>
+
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><div class="num n-total" id="total">-</div><div class="label">전체</div></div>
+      <div class="stat"><div class="num n-done" id="done">-</div><div class="label">완료</div></div>
+      <div class="stat"><div class="num n-pend" id="pending">-</div><div class="label">대기</div></div>
+      <div class="stat"><div class="num n-fail" id="failed">-</div><div class="label">실패</div></div>
+    </div>
+    <div class="bar"><div class="fill" id="fill"></div></div>
+    <div class="eta" id="eta">계산 중...</div>
+    <a class="btn" id="resultBtn" href="#">결과 보러 가기 →</a>
+    <p class="note">이 창을 닫아도 처리는 계속됩니다. 나중에 이 주소로 다시 들어오면 돼요.</p>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px;color:var(--sub);margin-bottom:12px">최근 로그</div>
+    <div class="logs" id="logs">로딩 중...</div>
+  </div>
+</div>
+
+<script>
+const batchId = new URLSearchParams(location.search).get('batch');
+if (!batchId) location.href = '/';
+
+async function poll() {
+  try {
+    const res = await fetch(`/api/batches/${batchId}`);
+    if (!res.ok) return;
+    const p = await res.json();
+
+    document.getElementById('total').textContent = p.total;
+    document.getElementById('done').textContent = p.done;
+    document.getElementById('pending').textContent = p.pending + p.processing;
+    document.getElementById('failed').textContent = p.failed;
+
+    const pct = p.total ? Math.round((p.done + p.failed) / p.total * 100) : 0;
+    document.getElementById('fill').style.width = pct + '%';
+
+    const eta = document.getElementById('eta');
+    if (p.status !== 'processing') {
+      eta.textContent = p.status === 'completed'
+        ? '✅ 전체 완료!'
+        : `⚠️ 완료 (실패 ${p.failed}장 — 결과 화면에서 재시도 가능)`;
+      const btn = document.getElementById('resultBtn');
+      btn.style.display = 'block';
+      btn.href = `/results.html?batch=${batchId}`;
+    } else if (p.etaSeconds != null) {
+      const m = Math.floor(p.etaSeconds / 60), s = p.etaSeconds % 60;
+      eta.textContent = `예상 남은 시간: 약 ${m > 0 ? m + '분 ' : ''}${s}초`;
+    } else {
+      eta.textContent = '처리 시작 대기 중...';
+    }
+
+    document.getElementById('logs').innerHTML = (p.recentLogs || [])
+      .map(l => `<div class="${l.level}">[${l.at.slice(11,19)}] ${esc(l.message)}</div>`)
+      .join('') || '아직 로그 없음';
+  } catch (e) { /* 다음 폴링에서 재시도 */ }
+}
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+poll();
+setInterval(poll, 5000);
+</script>
+</body>
+</html>

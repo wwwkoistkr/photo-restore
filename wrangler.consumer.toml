@@ -1,0 +1,31 @@
+# ===== Consumer Worker (큐 소비 — 데몬 역할) =====
+name = "photo-restore-consumer"
+main = "src/consumer/index.ts"
+compatibility_date = "2026-06-01"
+
+[vars]
+# API Worker 배포 후 출력된 URL로 교체 (마지막 / 없이)
+PUBLIC_BASE_URL = "https://photo-restore-api.wwwkoistkr.workers.dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "photo-restore-db"
+database_id = "753af3a6-c29a-4574-a77d-6b2ee7436faa"   # api와 동일한 ID
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "photo-restore"
+
+# producers 바인딩 (markFailed 등 공유 코드의 타입 충족용)
+[[queues.producers]]
+binding = "JOB_QUEUE"
+queue = "photo-jobs"
+
+[[queues.consumers]]
+queue = "photo-jobs"
+max_batch_size = 1          # 장당 처리 (로컬 순차 처리 계승)
+max_retries = 3             # RETRY_MAX=3 계승
+dead_letter_queue = "photo-jobs-dlq"
+
+# 시크릿 (코드·toml에 평문 금지 — 규칙 6):
+# wrangler secret put REPLICATE_API_TOKEN -c wrangler.consumer.toml

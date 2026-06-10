@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>결과 — PhotoRestore</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--sub:#8b949e;
+--accent:#58a6ff;--green:#3fb950;--red:#f85149}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Malgun Gothic',sans-serif;min-height:100vh;padding:clamp(16px,4vw,48px)}
+.container{max-width:960px;margin:0 auto}
+h1{font-size:clamp(22px,4vw,30px);background:linear-gradient(90deg,#58a6ff,#bc8cff);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:20px}
+.toolbar{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.btn{background:linear-gradient(90deg,#238636,#2ea043);color:#fff;border:none;border-radius:10px;
+padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.gray{background:#21262d;border:1px solid var(--border)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.item{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.compare{display:grid;grid-template-columns:1fr 1fr}
+.compare img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.compare .label{position:absolute;top:6px;left:6px;font-size:10px;background:rgba(0,0,0,.6);
+padding:2px 8px;border-radius:8px}
+.half{position:relative}
+.meta{padding:12px 14px;font-size:13px}
+.meta .name{font-weight:600;word-break:break-all}
+.meta .status{font-size:12px;margin-top:4px}
+.s-done{color:var(--green)} .s-failed{color:var(--red)} .s-other{color:var(--sub)}
+.meta a{color:var(--accent);font-size:12px;text-decoration:none;margin-right:12px}
+.note{font-size:13px;color:var(--sub);margin-bottom:20px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>보정 결과</h1>
+  <p class="note">왼쪽이 원본, 오른쪽이 보정본이에요. 이미지를 클릭하면 원본 크기로 열려요.</p>
+
+  <div class="toolbar">
+    <button class="btn" id="dlAll">✓ 보정본 전체 받기</button>
+    <button class="btn gray" id="retryBtn" style="display:none">실패 건 재시도</button>
+    <a class="btn gray" href="/">새 배치 시작</a>
+  </div>
+
+  <div class="grid" id="grid">로딩 중...</div>
+</div>
+
+<script>
+const batchId = new URLSearchParams(location.search).get('batch');
+if (!batchId) location.href = '/';
+let items = [];
+
+async function load() {
+  const res = await fetch(`/api/batches/${batchId}/results`);
+  const data = await res.json();
+  items = data.items || [];
+
+  const failedCount = items.filter(i => i.status === 'failed').length;
+  document.getElementById('retryBtn').style.display = failedCount > 0 ? 'inline-block' : 'none';
+
+  document.getElementById('grid').innerHTML = items.map(i => {
+    const statusHtml = i.status === 'done'
+      ? '<span class="status s-done">✓ 완료</span>'
+      : i.status === 'failed'
+        ? `<span class="status s-failed">✗ 실패 — ${esc(i.error || '')}</span>`
+        : `<span class="status s-other">${i.status}</span>`;
+    const enhanced = i.enhancedUrl
+      ? `<div class="half"><a href="${i.enhancedUrl}" target="_blank">
+           <img src="${i.enhancedUrl}" loading="lazy"></a>
+           <span class="label">보정</span></div>`
+      : `<div class="half" style="background:#0d1117;display:flex;align-items:center;
+           justify-content:center;color:#8b949e;font-size:12px">처리 안 됨</div>`;
+    return `<div class="item">
+      <div class="compare">
+        <div class="half"><a href="${i.originalUrl}" target="_blank">
+          <img src="${i.originalUrl}" loading="lazy"></a>
+          <span class="label">원본</span></div>
+        ${enhanced}
+      </div>
+      <div class="meta">
+        <div class="name">${esc(i.filename)}</div>
+        ${statusHtml}
+        <div style="margin-top:8px">
+          ${i.enhancedUrl ? `<a href="${i.enhancedUrl}" download="${esc(i.filename)}">보정본 받기</a>` : ''}
+          <a href="${i.originalUrl}" download="${esc(i.filename)}">원본 받기</a>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// 보정본 순차 다운로드 (브라우저 메모리 안전)
+document.getElementById('dlAll').onclick = async () => {
+  const done = items.filter(i => i.status === 'done' && i.enhancedUrl);
+  const btn = document.getElementById('dlAll');
+  btn.disabled = true;
+  for (let n = 0; n < done.length; n++) {
+    btn.textContent = `다운로드 중 ${n+1}/${done.length}`;
+    const a = document.createElement('a');
+    a.href = done[n].enhancedUrl;
+    a.download = done[n].filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    await new Promise(r => setTimeout(r, 600)); // 브라우저 차단 방지 간격
+  }
+  btn.textContent = '✓ 보정본 전체 받기';
+  btn.disabled = false;
+};
+
+document.getElementById('retryBtn').onclick = async () => {
+  const res = await fetch(`/api/batches/${batchId}/retry-failed`, {method:'POST'});
+  const d = await res.json();
+  alert(`${d.requeued}장 재시도 시작! 진행 화면으로 이동합니다.`);
+  location.href = `/progress.html?batch=${batchId}`;
+};
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+load();
+</script>
+</body>
+</html>

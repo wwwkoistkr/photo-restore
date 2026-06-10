@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhotoRestore — 사진 일괄 보정</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--sub:#8b949e;
+--accent:#58a6ff;--green:#3fb950;--red:#f85149}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Malgun Gothic',sans-serif;min-height:100vh;padding:clamp(16px,4vw,48px)}
+.container{max-width:760px;margin:0 auto}
+h1{font-size:clamp(24px,5vw,34px);background:linear-gradient(90deg,#58a6ff,#bc8cff);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;display:inline-block}
+.ver{font-size:12px;color:var(--green);border:1px solid var(--green);border-radius:10px;
+padding:2px 10px;vertical-align:middle;margin-left:10px}
+.sub{color:var(--sub);font-size:14px;margin:8px 0 32px;line-height:1.6}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+.drop{border:2px dashed var(--border);border-radius:12px;padding:34px 24px;text-align:center;
+cursor:pointer;transition:all .2s}
+.drop:hover,.drop.over{border-color:var(--accent);background:rgba(88,166,255,.05)}
+.drop p{color:var(--sub);font-size:15px;line-height:1.8}
+.drop strong{color:var(--accent)}
+.folder-btn{display:block;width:100%;margin-top:12px;background:#21262d;border:1px solid var(--border);
+color:var(--text);border-radius:10px;padding:13px;font-size:14px;font-weight:600;cursor:pointer}
+.folder-btn:hover{border-color:var(--accent)}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
+.opt{background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:13px 15px}
+.o-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.o-title{font-size:13px;color:var(--text);font-weight:600}
+.o-val{font-size:15px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums;min-width:48px;text-align:right}
+.o-desc{font-size:11px;color:var(--sub);margin-top:8px;line-height:1.5}
+select{width:100%;background:#161b22;border:1px solid var(--border);
+color:var(--text);border-radius:8px;padding:9px;font-size:14px}
+input[type=range]{width:100%;accent-color:#58a6ff;cursor:pointer}
+.preview-btn{display:block;width:100%;margin-top:14px;background:#21262d;border:1px solid var(--accent);
+color:var(--accent);border-radius:10px;padding:13px;font-size:14px;font-weight:600;cursor:pointer}
+.preview-btn:disabled{opacity:.4;cursor:not-allowed}
+.preview-area{display:none;margin-top:14px;background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:14px}
+.preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.preview-grid img{width:100%;border-radius:8px;display:block}
+.preview-label{font-size:11px;color:var(--sub);text-align:center;margin-top:6px}
+.preview-hint{font-size:12px;color:var(--green);text-align:center;margin-top:10px}
+.filelist{max-height:140px;overflow-y:auto;font-size:13px;color:var(--sub);margin-top:16px}
+.filelist div{padding:4px 0;border-bottom:1px solid var(--border)}
+.btn{display:block;width:100%;background:linear-gradient(90deg,#1f6feb,#8957e5);color:#fff;
+border:none;border-radius:10px;padding:16px;font-size:16px;font-weight:600;cursor:pointer;margin-top:20px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.progress-wrap{display:none;margin-top:20px}
+.bar{height:10px;background:#0d1117;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.fill{height:100%;width:0%;background:linear-gradient(90deg,#1f6feb,#8957e5);transition:width .3s}
+.ptext{font-size:13px;color:var(--sub);margin-top:8px;text-align:center}
+.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;background:rgba(63,185,80,.15);color:var(--green);margin-left:8px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>PhotoRestore</h1><span class="ver">v6</span>
+  <p class="sub">인물사진 일괄 보정 — 업로드 한 번이면 끝까지 자동 처리됩니다.<br>
+  CodeFormer 복원 엔진 사용 <span class="badge">얼굴 동일성 보존</span></p>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <p><strong>클릭</strong>하거나 사진(또는 폴더)을 <strong>드래그</strong>해서 올려주세요<br>
+      jpg · png · webp / 장당 25MB / 최대 500장</p>
+      <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.webp" style="display:none">
+      <input type="file" id="folderInput" webkitdirectory style="display:none">
+    </div>
+    <button class="folder-btn" id="folderBtn">📁 폴더째 선택 (예: C:\사진보정)</button>
+
+    <div class="opts">
+      <div class="opt">
+        <div class="o-head"><span class="o-title">업스케일 배율</span></div>
+        <select id="upscale">
+          <option value="2" selected>2배 (권장)</option>
+          <option value="4">4배 (느림·용량 큼)</option>
+        </select>
+        <div class="o-desc">해상도를 몇 배로 키울지</div>
+      </div>
+
+      <div class="opt">
+        <div class="o-head">
+          <span class="o-title">원본 충실도</span>
+          <span class="o-val" id="fidelityVal">0.5</span>
+        </div>
+        <input type="range" id="fidelity" min="0" max="1" step="0.1" value="0.5">
+        <div class="o-desc">높을수록 원본 질감 보존 (권장 0.5~0.7)</div>
+      </div>
+
+      <div class="opt">
+        <div class="o-head">
+          <span class="o-title">그림자 완화</span>
+          <span class="o-val" id="sliftVal">60%</span>
+        </div>
+        <input type="range" id="slift" min="0" max="100" step="5" value="60">
+        <div class="o-desc">어두운 부분만 밝힘 · 0% = 끄기 (권장 50~70%)</div>
+      </div>
+
+      <div class="opt">
+        <div class="o-head">
+          <span class="o-title">선명도 강화</span>
+          <span class="o-val" id="sharpVal">50%</span>
+        </div>
+        <input type="range" id="sharp" min="0" max="100" step="5" value="50">
+        <div class="o-desc">윤곽선 또렷하게 · 0% = 끄기 (권장 40~60%)</div>
+      </div>
+
+      <div class="opt" style="grid-column:1 / -1">
+        <div class="o-head">
+          <span class="o-title">채도 (색감 진하게)</span>
+          <span class="o-val" id="satVal">10%</span>
+        </div>
+        <input type="range" id="sat" min="0" max="30" step="5" value="10">
+        <div class="o-desc">색을 살짝 풍부하게 · 0% = 끄기 (권장 5~15%, 과하면 부자연스러움)</div>
+      </div>
+    </div>
+
+    <button class="preview-btn" id="previewBtn" disabled>👁 미리보기 — 1번 사진으로 효과 확인 (무료·즉시)</button>
+    <div class="preview-area" id="previewArea">
+      <div class="preview-grid">
+        <div><img id="pvOrig"><div class="preview-label">원본</div></div>
+        <div><img id="pvProc"><div class="preview-label">사전처리 적용</div></div>
+      </div>
+      <div class="preview-hint">슬라이더를 조절하고 미리보기를 다시 누르면 바로 반영돼요.
+      마음에 들면 그대로 "보정 시작"! (AI 보정은 업로드 후 추가 적용됩니다)</div>
+    </div>
+
+    <div class="filelist" id="fileList"></div>
+
+    <button class="btn" id="startBtn" disabled>사진을 선택해 주세요</button>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <div class="ptext" id="ptext">업로드 준비 중...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+console.log('PhotoRestore v6 loaded');
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const folderInput = document.getElementById('folderInput');
+const folderBtn = document.getElementById('folderBtn');
+const fileList = document.getElementById('fileList');
+const startBtn = document.getElementById('startBtn');
+const previewBtn = document.getElementById('previewBtn');
+let files = [];
+
+// ===== 슬라이더 ↔ 숫자 동기화 (이벤트 + 0.3초 폴링 이중 안전장치) =====
+const SLIDERS = [
+  { id:'fidelity', label:'fidelityVal', fmt: v => (Math.round(v*10)/10).toFixed(1) },
+  { id:'slift',    label:'sliftVal',    fmt: v => v == 0 ? '끄기' : Math.round(v) + '%' },
+  { id:'sharp',    label:'sharpVal',    fmt: v => v == 0 ? '끄기' : Math.round(v) + '%' },
+  { id:'sat',      label:'satVal',      fmt: v => v == 0 ? '끄기' : Math.round(v) + '%' },
+];
+function syncSliders() {
+  for (const s of SLIDERS) {
+    const el = document.getElementById(s.id);
+    const lb = document.getElementById(s.label);
+    if (el && lb) {
+      const txt = s.fmt(Number(el.value));
+      if (lb.textContent !== txt) lb.textContent = txt;
+    }
+  }
+}
+for (const s of SLIDERS) {
+  const el = document.getElementById(s.id);
+  el.addEventListener('input', syncSliders);
+  el.addEventListener('change', syncSliders);
+}
+setInterval(syncSliders, 300);   // 폴링 폴백 — 어떤 환경에서도 동작
+syncSliders();
+
+function currentParams() {
+  return {
+    fidelity: Math.round(Number(document.getElementById('fidelity').value)*10)/10,
+    k:        Number(document.getElementById('slift').value) / 100,
+    sharpAmt: Number(document.getElementById('sharp').value) / 100 * 0.7,
+    sat:      Number(document.getElementById('sat').value) / 100,
+  };
+}
+
+drop.onclick = () => fileInput.click();
+folderBtn.onclick = () => folderInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => {
+  e.preventDefault(); drop.classList.remove('over');
+  addFiles([...e.dataTransfer.files]);
+};
+fileInput.onchange = () => addFiles([...fileInput.files]);
+folderInput.onchange = () => addFiles([...folderInput.files]);
+
+function addFiles(list) {
+  const ok = ['.jpg','.jpeg','.png','.webp'];
+  for (const f of list) {
+    const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+    if (!ok.includes(ext)) continue;
+    if (f.size > 25*1024*1024) continue;
+    if (files.some(x => x.name === f.name)) continue;
+    if (files.length >= 500) break;
+    files.push(f);
+  }
+  render();
+}
+
+function render() {
+  fileList.innerHTML = files.map(f =>
+    `<div>${f.name} <span style="float:right">${(f.size/1024/1024).toFixed(1)}MB</span></div>`
+  ).join('');
+  const has = files.length > 0;
+  startBtn.disabled = !has;
+  previewBtn.disabled = !has;
+  startBtn.textContent = has ? `${files.length}장 보정 시작` : '사진을 선택해 주세요';
+}
+
+// ===== 픽셀 패스: 그림자 완화 + 채도 + 대비 (수학 연산 — 얼굴 변형 없음) =====
+function pixelPass(d, k, sat) {
+  const T = 150, c = 1.06;
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+    let L = 0.299*r + 0.587*g + 0.114*b;
+    if (k > 0 && L < T) {
+      const m = (T - L) / T;
+      const gain = 1 + k * m * m;
+      r *= gain; g *= gain; b *= gain;
+      L *= gain;
+    }
+    if (sat > 0) {                    // 채도: 회색에서 멀어지게
+      r = L + (r - L) * (1 + sat);
+      g = L + (g - L) * (1 + sat);
+      b = L + (b - L) * (1 + sat);
+    }
+    r = (r - 128) * c + 128;          // 대비 복원
+    g = (g - 128) * c + 128;
+    b = (b - 128) * c + 128;
+    d[i]   = r < 0 ? 0 : r > 255 ? 255 : r;
+    d[i+1] = g < 0 ? 0 : g > 255 ? 255 : g;
+    d[i+2] = b < 0 ? 0 : b > 255 ? 255 : b;
+  }
+}
+
+function sharpenPass(d, w, h, a) {
+  const src = new Uint8ClampedArray(d);
+  const rb = w * 4;
+  for (let y = 1; y < h - 1; y++) {
+    let i = (y * w + 1) * 4;
+    for (let x = 1; x < w - 1; x++, i += 4) {
+      for (let ch = 0; ch < 3; ch++) {
+        const p = i + ch;
+        const v = src[p]*(1+4*a) - a*(src[p-4]+src[p+4]+src[p-rb]+src[p+rb]);
+        d[p] = v < 0 ? 0 : v > 255 ? 255 : v;
+      }
+    }
+  }
+}
+
+async function renderToCanvas(file, maxW) {
+  const img = await createImageBitmap(file);
+  const scale = maxW ? Math.min(1, maxW / img.width) : 1;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.close();
+  return { canvas, ctx };
+}
+
+async function processImage(file, p, maxW) {
+  try {
+    const { canvas, ctx } = await renderToCanvas(file, maxW);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    if (p.k > 0 || p.sat > 0) pixelPass(imageData.data, p.k, p.sat);
+    if (p.sharpAmt > 0) sharpenPass(imageData.data, canvas.width, canvas.height, p.sharpAmt);
+    ctx.putImageData(imageData, 0, 0);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.95));
+    return blob || file;
+  } catch (e) { return file; }
+}
+
+// ===== 미리보기 (크레딧 0 — 브라우저에서 즉시) =====
+previewBtn.onclick = async () => {
+  if (!files.length) return;
+  previewBtn.disabled = true;
+  previewBtn.textContent = '미리보기 생성 중...';
+  try {
+    const p = currentParams();
+    const { canvas: oc } = await renderToCanvas(files[0], 900);
+    document.getElementById('pvOrig').src = oc.toDataURL('image/jpeg', 0.9);
+    const blob = await processImage(files[0], p, 900);
+    document.getElementById('pvProc').src = URL.createObjectURL(blob);
+    document.getElementById('previewArea').style.display = 'block';
+  } finally {
+    previewBtn.disabled = false;
+    previewBtn.textContent = '👁 미리보기 — 1번 사진으로 효과 확인 (무료·즉시)';
+  }
+};
+
+startBtn.onclick = async () => {
+  startBtn.disabled = true;
+  document.getElementById('progressWrap').style.display = 'block';
+  const fill = document.getElementById('fill');
+  const ptext = document.getElementById('ptext');
+
+  try {
+    const p = currentParams();
+    ptext.textContent = '배치 생성 중...';
+    const createRes = await fetch('/api/batches', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        files: files.map(f => ({filename: f.name, size: f.size})),
+        upscale: Number(document.getElementById('upscale').value),
+        fidelity: p.fidelity
+      })
+    });
+    const created = await createRes.json();
+    if (!createRes.ok) throw new Error(created.error || '배치 생성 실패');
+    const batchId = created.batchId;
+
+    const needProcess = p.k > 0 || p.sharpAmt > 0 || p.sat > 0;
+
+    for (let i = 0; i < files.length; i++) {
+      let payload = files[i];
+      if (needProcess) {
+        ptext.textContent = `사전 처리 ${i+1}/${files.length} — ${files[i].name}`;
+        payload = await processImage(files[i], p, 0);
+      }
+      ptext.textContent = `업로드 ${i+1}/${files.length} — ${files[i].name}`;
+      const up = await fetch(
+        `/api/batches/${batchId}/files/${encodeURIComponent(files[i].name)}`,
+        { method: 'PUT', body: payload }
+      );
+      if (!up.ok) {
+        const e = await up.json().catch(() => ({}));
+        throw new Error(`업로드 실패 (${files[i].name}): ${e.error || up.status}`);
+      }
+      fill.style.width = `${Math.round((i+1)/files.length*100)}%`;
+    }
+
+    ptext.textContent = '처리 시작 요청 중...';
+    const st = await fetch(`/api/batches/${batchId}/start`, {method:'POST'});
+    if (!st.ok) throw new Error('처리 시작 실패');
+
+    location.href = `/progress.html?batch=${batchId}`;
+  } catch (err) {
+    ptext.textContent = '오류: ' + err.message;
+    ptext.style.color = '#f85149';
+    startBtn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>
